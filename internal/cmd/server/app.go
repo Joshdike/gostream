@@ -7,16 +7,19 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/lordvidex/gostream/internal/config"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/lordvidex/gostream/internal/config"
+
 	"github.com/catalystgo/catalystgo/closer"
+
 	"github.com/lordvidex/gostream/internal/app/gostream"
 	"github.com/lordvidex/gostream/internal/db/pg"
 	"github.com/lordvidex/gostream/internal/watchers"
@@ -34,7 +37,7 @@ func New(cfg config.Server) *App {
 	return &App{
 		cfg: cfg,
 		closer: closer.New(
-			closer.WithSignals(os.Kill, os.Interrupt),
+			closer.WithSignals(os.Kill, os.Interrupt, syscall.SIGTERM),
 			closer.WithTimeout(time.Minute*3),
 		),
 	}
@@ -99,7 +102,9 @@ func (a *App) Serve(ctx context.Context) error {
 	})
 
 	err = servers.Wait() // servers finish first
-	a.closer.Wait()      // wait for connections to close
+
+	a.closer.CloseAll() // it's safe to call CloseAll again
+	a.closer.Wait()     // wait for connections to close
 
 	return err
 }
